@@ -659,11 +659,12 @@ MAP_HTML = r"""<!doctype html>
     <div class="muted">Фид: <span id="feedtime">—</span> · обновление через <span id="cd">30</span> с</div>
     <div id="err" class="err"></div>
     <div class="legend">
-      <div class="item"><span class="dot" style="background:var(--hi)"></span>остановится на следующей ≥ 60% (обычный автобус в рейсе)</div>
-      <div class="item"><span class="dot" style="background:var(--mid)"></span>30–60%</div>
-      <div class="item"><span class="dot" style="background:var(--lo)"></span>&lt; 30%: едет мимо остановок (не в рейсе или полный)</div>
-      <div class="muted note">Обычный автобус в рейсе — около <span id="base"></span>%: пропускает остановку, только если там никто не ждёт.
-        Шанс падает, когда автобус проезжает несколько остановок подряд.</div>
+      <div class="muted">Число на метке — вероятность, что автобус едет мимо остановок (не в рейсе или полный):</div>
+      <div class="item"><span class="dot" style="background:var(--hi)"></span>&lt; 30%: обычный рейс</div>
+      <div class="item"><span class="dot" style="background:var(--mid)"></span>30–70%: проехал несколько остановок, под вопросом</div>
+      <div class="item"><span class="dot" style="background:var(--lo)"></span>≥ 70%: скорее всего едет мимо остановок</div>
+      <div class="muted note">Растёт, когда автобус проезжает остановки подряд, и падает, как только его видят стоящим на остановке.
+        Шанс остановки на следующей (в карточке автобуса) у обычного рейса — около <span id="base"></span>%.</div>
     </div>
     <div id="list"></div>
   </div>
@@ -672,7 +673,7 @@ MAP_HTML = r"""<!doctype html>
 <script>
 const REFRESH = 30;
 const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
-const colorFor = p => p >= 0.6 ? css('--hi') : p >= 0.3 ? css('--mid') : css('--lo');
+const colorFor = p => p >= 0.7 ? css('--lo') : p >= 0.3 ? css('--mid') : css('--hi');
 const pct = p => p == null ? '—' : Math.round(p * 100) + '%';
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const LABEL = {stopped:'стоял', likely_stopped:'скорее стоял', likely_passed:'скорее проехал', unknown:'неясно'};
@@ -707,10 +708,10 @@ function busPopup(b) {
 }
 
 function busIcon(b) {
-  const c = colorFor(b.p_stop_next);
+  const c = colorFor(b.p_skip);
   return L.divIcon({className:'', iconSize:[28,28], iconAnchor:[14,14],
     html:`<div style="position:relative;transform:rotate(${b.bearing}deg)"><span class="arrow"></span>
-          <div class="busicon" style="background:${c};transform:rotate(${-b.bearing}deg)">${Math.round(b.p_stop_next*100)}</div></div>`});
+          <div class="busicon" style="background:${c};transform:rotate(${-b.bearing}deg)">${Math.round(b.p_skip*100)}</div></div>`});
 }
 
 function render() {
@@ -724,15 +725,15 @@ function render() {
     if (!m) { m = busMarkers[b.id] = L.marker([b.lat, b.lon], {zIndexOffset:1000}).addTo(busLayer); m.bindPopup(''); }
     m.setLatLng([b.lat, b.lon]).setIcon(busIcon(b));
     m.getPopup().setContent(busPopup(b));
-    m.bindTooltip(`${b.plate} · стоп ${pct(b.p_stop_next)}`, {direction:'top', offset:[0,-14]});
+    m.bindTooltip(`${b.plate} · едет мимо ${pct(b.p_skip)} · стоп ${pct(b.p_stop_next)}`, {direction:'top', offset:[0,-14]});
   }
   for (const id of Object.keys(busMarkers)) if (!seen.has(id)) { busLayer.removeLayer(busMarkers[id]); delete busMarkers[id]; }
   for (const [id, m] of Object.entries(stopMarkers)) if (m.isPopupOpen()) m.getPopup().setContent(stopPopup(m.stop));
   const buses = [...state.buses].sort((a, b) => a.headsign.localeCompare(b.headsign) || a.start.localeCompare(b.start));
   document.getElementById('list').innerHTML = buses.map(b => `
     <div class="bus" data-id="${esc(b.id)}">
-      <div class="row"><span><span class="dot" style="display:inline-block;vertical-align:-1px;background:${colorFor(b.p_stop_next)}"></span>
-        <b>${esc(b.plate)}</b> → ${esc(b.headsign)}</span><span class="pct">${pct(b.p_stop_next)}</span></div>
+      <div class="row"><span><span class="dot" style="display:inline-block;vertical-align:-1px;background:${colorFor(b.p_skip)}"></span>
+        <b>${esc(b.plate)}</b> → ${esc(b.headsign)}</span><span class="pct" title="вероятность «едет мимо остановок»">${pct(b.p_skip)}</span></div>
       <div class="muted">${b.speed} км/ч · ${b.next_stop ? 'след.: ' + esc(b.next_stop.name) + (b.next_stop.eta ? ' ' + esc(b.next_stop.eta) : '') : 'нет данных о следующей'}</div>
     </div>`).join('') || '<div class="muted">Активных автобусов нет</div>';
   document.querySelectorAll('.bus').forEach(el => el.onclick = () => {
