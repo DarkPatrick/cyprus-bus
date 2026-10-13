@@ -1,0 +1,15 @@
+[Unit]
+Description=Limassol bus 30 live map
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=bus30
+WorkingDirectory=/opt/cyprus-bus
+Environment=BUS30_DATA_DIR=/opt/cyprus-bus/data
+ExecStart=/opt/cyprus-bus/.venv/bin/python /opt/cyprus-bus/bus30.py --serve 8093 --log /opt/cyprus-bus/data/positions_{date}.csv
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
