@@ -616,10 +616,12 @@ MAP_HTML = r"""<!doctype html>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <style>
   :root { --bg:#fff; --fg:#1f2328; --muted:#656d76; --line:#d0d7de; --panel:#f6f8fa;
-          --hi:#1a7f37; --mid:#bf8700; --lo:#cf222e; --dir0:#0969da; --dir1:#8250df; }
+          --hi:#1a7f37; --mid:#bf8700; --lo:#cf222e; --dir0:#0969da; --dir1:#8250df;
+          --arrow:#1f2328; --halo:#ffffff; }
   @media (prefers-color-scheme: dark) {
     :root { --bg:#0d1117; --fg:#e6edf3; --muted:#8d96a0; --line:#30363d; --panel:#161b22;
-            --hi:#3fb950; --mid:#d29922; --lo:#f85149; --dir0:#4493f8; --dir1:#a371f7; }
+            --hi:#3fb950; --mid:#d29922; --lo:#f85149; --dir0:#4493f8; --dir1:#a371f7;
+            --arrow:#f0f6fc; --halo:#0d1117; }
   }
   * { box-sizing:border-box; }
   html, body { margin:0; height:100%; background:var(--bg); color:var(--fg);
@@ -640,8 +642,9 @@ MAP_HTML = r"""<!doctype html>
   .pct { font-weight:600; font-variant-numeric:tabular-nums; }
   .busicon { display:flex; align-items:center; justify-content:center; width:28px; height:28px; border-radius:50%;
              color:#fff; font-weight:700; font-size:11px; border:2px solid #fff; box-shadow:0 1px 3px rgba(0,0,0,.4); }
-  .arrow { position:absolute; left:50%; top:-7px; width:0; height:0; margin-left:-5px;
-           border-left:5px solid transparent; border-right:5px solid transparent; border-bottom:7px solid #222; }
+  .arrow { position:absolute; left:50%; top:-14px; width:0; height:0; margin-left:-7px;
+           border-left:7px solid transparent; border-right:7px solid transparent; border-bottom:12px solid var(--arrow);
+           filter: drop-shadow(0 0 1px var(--halo)) drop-shadow(0 0 1px var(--halo)); }
   @media (prefers-color-scheme: dark) { .basemap { filter: invert(1) hue-rotate(180deg) brightness(.85) contrast(.9); } }
   .leaflet-popup-content { font-size:13px; }
   .leaflet-popup-content table { border-collapse:collapse; }
