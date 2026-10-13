@@ -617,11 +617,11 @@ MAP_HTML = r"""<!doctype html>
 <style>
   :root { --bg:#fff; --fg:#1f2328; --muted:#656d76; --line:#d0d7de; --panel:#f6f8fa;
           --hi:#1a7f37; --mid:#bf8700; --lo:#cf222e; --dir0:#0969da; --dir1:#8250df;
-          --arrow:#1f2328; --halo:#ffffff; }
+          --arrow:#1f2328; --halo:#ffffff; --me:#0969da; }
   @media (prefers-color-scheme: dark) {
     :root { --bg:#0d1117; --fg:#e6edf3; --muted:#8d96a0; --line:#30363d; --panel:#161b22;
             --hi:#3fb950; --mid:#d29922; --lo:#f85149; --dir0:#4493f8; --dir1:#a371f7;
-            --arrow:#f0f6fc; --halo:#0d1117; }
+            --arrow:#f0f6fc; --halo:#0d1117; --me:#4493f8; }
   }
   * { box-sizing:border-box; }
   html, body { margin:0; height:100%; background:var(--bg); color:var(--fg);
@@ -646,6 +646,11 @@ MAP_HTML = r"""<!doctype html>
            border-left:7px solid transparent; border-right:7px solid transparent; border-bottom:12px solid var(--arrow);
            filter: drop-shadow(0 0 1px var(--halo)) drop-shadow(0 0 1px var(--halo)); }
   @media (prefers-color-scheme: dark) { .basemap { filter: invert(1) hue-rotate(180deg) brightness(.85) contrast(.9); } }
+  .me { width:18px; height:18px; border-radius:50%; background:var(--me); border:3px solid #fff;
+        box-shadow:0 0 0 2px var(--me), 0 1px 4px rgba(0,0,0,.5); }
+  .geo { display:flex; align-items:center; gap:8px; margin-top:8px; font-size:12px; }
+  .geo button { font:inherit; padding:4px 10px; border-radius:6px; border:1px solid var(--line);
+                background:var(--bg); color:var(--fg); cursor:pointer; }
   .leaflet-popup-content { font-size:13px; }
   .leaflet-popup-content table { border-collapse:collapse; }
   .leaflet-popup-content td { padding:1px 6px 1px 0; }
@@ -661,6 +666,7 @@ MAP_HTML = r"""<!doctype html>
     <h1>Автобус <span id="route">30</span> · Лимасол</h1>
     <div class="muted">Фид: <span id="feedtime">—</span> · обновление через <span id="cd">30</span> с</div>
     <div id="err" class="err"></div>
+    <div class="geo"><button id="geobtn" type="button">📍 Где я</button><span id="geostatus" class="muted"></span></div>
     <div class="legend">
       <div class="muted">Число на метке — вероятность, что автобус едет мимо остановок (не в рейсе или полный):</div>
       <div class="item"><span class="dot" style="background:var(--hi)"></span>&lt; 30%: обычный рейс</div>
@@ -688,6 +694,48 @@ L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',
    attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'}).addTo(map);
 const stopLayer = L.layerGroup().addTo(map), busLayer = L.layerGroup().addTo(map);
 let stopMarkers = {}, busMarkers = {}, state = null, countdown = REFRESH;
+
+// --- viewer location: stays in the browser, never sent to the server ---
+const LIMASSOL = L.latLngBounds([34.62, 32.90], [34.80, 33.22]);
+let meMarker = null, meAccuracy = null, meWatch = null, meLast = null, meCentered = false;
+const geoStatus = t => { document.getElementById('geostatus').textContent = t; };
+
+function showMe(pos) {
+  const ll = L.latLng(pos.coords.latitude, pos.coords.longitude), acc = pos.coords.accuracy;
+  meLast = ll;
+  if (!LIMASSOL.contains(ll)) {
+    if (meMarker) { map.removeLayer(meMarker); map.removeLayer(meAccuracy); meMarker = meAccuracy = null; }
+    geoStatus('вы не в Лимасоле — не показываю');
+    return;
+  }
+  if (!meMarker) {
+    meAccuracy = L.circle(ll, {radius: acc, color: css('--me'), weight: 1, fillOpacity: .12, interactive: false}).addTo(map);
+    meMarker = L.marker(ll, {icon: L.divIcon({className: '', html: '<div class="me"></div>', iconSize: [18, 18], iconAnchor: [9, 9]}),
+                             zIndexOffset: 2000, keyboard: false}).bindTooltip('Вы здесь').addTo(map);
+  }
+  meMarker.setLatLng(ll); meAccuracy.setLatLng(ll).setRadius(acc);
+  geoStatus(`вы на карте (±${Math.round(acc)} м)`);
+  if (!meCentered) { meCentered = true; map.setView(ll, Math.max(map.getZoom(), 15)); }
+}
+
+function geoError(e) {
+  geoStatus(e.code === 1 ? 'доступ к геолокации запрещён (можно разрешить в настройках сайта)'
+                         : 'не удалось определить местоположение');
+}
+
+function startGeo() {
+  if (!('geolocation' in navigator)) { geoStatus('браузер не поддерживает геолокацию'); return; }
+  if (meWatch === null) {
+    geoStatus('запрашиваю доступ к геолокации…');
+    meWatch = navigator.geolocation.watchPosition(showMe, e => { geoError(e); if (e.code === 1) { navigator.geolocation.clearWatch(meWatch); meWatch = null; } },
+                                                  {enableHighAccuracy: true, maximumAge: 15000, timeout: 30000});
+  }
+}
+
+document.getElementById('geobtn').onclick = () => {
+  if (meMarker) map.setView(meMarker.getLatLng(), Math.max(map.getZoom(), 16));
+  else { meCentered = false; startGeo(); }
+};
 
 function stopPopup(stop) {
   const arr = (state && state.stops[stop.id]) || [];
@@ -773,6 +821,7 @@ async function refresh() {
   if (bounds.length) map.fitBounds(L.latLngBounds(bounds), {padding:[20,20], maxZoom:15});
   window.addEventListener('resize', () => map.invalidateSize());
   await refresh();
+  startGeo();
   setInterval(() => { countdown -= 1; document.getElementById('cd').textContent = Math.max(countdown, 0);
                       if (countdown <= 0) refresh(); }, 1000);
 })();
